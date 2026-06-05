@@ -16,6 +16,12 @@ PAGE = r"""<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Periscan</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M50 6 14 22v26c0 25 16 39 36 46 20-7 36-21 36-46V22z' fill='%233b82f6'/%3E%3Cpath d='M50 6 14 22v26c0 25 16 39 36 46V6z' fill='%231e40af'/%3E%3C/svg%3E">
+<meta name="description" content="Periscan — sieh von außen, welche deiner self-hosted Dienste öffentlich erreichbar sind.">
+<meta name="color-scheme" content="dark light">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#0d1117">
+
 <style>
   :root{
     --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --border:#2a3340;
