@@ -18,10 +18,12 @@ import argparse
 import concurrent.futures
 import ipaddress
 import json
+import os
 import re
 import socket
 import ssl
 import sys
+import time
 from datetime import datetime, timezone
 
 try:
@@ -466,6 +468,106 @@ def render(domain: str, results: list[dict], ports: list[dict] = None):
         print(f"\n{len(reachable)} erreichbar von {len(results)} aufgelösten Hosts.")
 
 
+# ---------- Monitoring: Snapshots, Diff über Zeit, Alerts ----------
+def _state_path(state_dir: str, domain: str) -> str:
+    safe = re.sub(r"[^A-Za-z0-9._-]", "_", domain)
+    return os.path.join(state_dir, f"{safe}.json")
+
+
+def _load_state(path: str) -> dict:
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_state(path: str, data: dict):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def exposures(data: dict) -> dict:
+    """Reduziert ein Scan-Ergebnis auf die bemerkenswerten Expositionen (für Diff/Alert)."""
+    items = {}
+    for r in data["results"]:
+        if not r.get("scheme") or r["risk"] in ("OK", "UNKNOWN"):
+            continue
+        app = r.get("app", "")
+        if app.startswith("kein Dienst") or app == "Unbekannter Dienst":
+            continue
+        items[f"host:{r['host']}"] = {"label": f"{r['host']} — {app}", "risk": r["risk"]}
+        for f in r.get("findings", []):
+            items[f"find:{r['host']}{f['path']}"] = {
+                "label": f"{r['host']}{f['path']} — {f.get('proves', '')[:90]}", "risk": f["risk"]}
+    for p in data.get("ports", []):
+        items[f"port:{p['ip']}:{p['port']}"] = {"label": f"{p['ip']}:{p['port']} — {p['service']}", "risk": p["risk"]}
+    return items
+
+
+def diff_exposures(prev: dict, curr: dict):
+    added = [dict(key=k, **v) for k, v in curr.items() if k not in prev]
+    removed = [dict(key=k, **v) for k, v in prev.items() if k not in curr]
+    changed = [dict(key=k, was=prev[k]["risk"], **v)
+               for k, v in curr.items() if k in prev and prev[k]["risk"] != v["risk"]]
+    return added, removed, changed
+
+
+def _alert_text(domain, added, removed, changed):
+    lines = [f"🛡 Periscan — Änderungen bei {domain}"]
+    for a in added:
+        lines.append(f"🔴 NEU [{a['risk']}] {a['label']}")
+    for c in changed:
+        lines.append(f"⚠ GEÄNDERT [{c['was']}→{c['risk']}] {c['label']}")
+    for r in removed:
+        lines.append(f"✅ WEG  {r['label']}")
+    return "\n".join(lines)
+
+
+def _post_discord(url, content):
+    try:
+        requests.post(url, json={"content": content[:1900]}, timeout=10)
+        _info("Discord-Alert gesendet.")
+    except Exception as e:
+        _warn(f"Discord-Alert fehlgeschlagen: {e}")
+
+
+def _post_webhook(url, payload):
+    try:
+        requests.post(url, json=payload, timeout=10)
+        _info("Webhook-Alert gesendet.")
+    except Exception as e:
+        _warn(f"Webhook-Alert fehlgeschlagen: {e}")
+
+
+def report_changes(domain, data, state_dir, discord=None, webhook=None, alert_min="MEDIUM"):
+    """Vergleicht mit dem letzten Snapshot, zeigt + alarmiert Änderungen, speichert neuen Snapshot."""
+    curr = exposures(data)
+    path = _state_path(state_dir, domain)
+    prev = _load_state(path)
+    added, removed, changed = diff_exposures(prev, curr)
+    _save_state(path, curr)
+    if not prev:
+        _info(f"Erster Snapshot gespeichert ({len(curr)} Expositionen) — ab jetzt werden Änderungen erkannt.")
+        return
+    if not (added or removed or changed):
+        _info("Keine Änderungen seit letztem Scan.")
+        return
+    text = _alert_text(domain, added, removed, changed)
+    if _RICH:
+        _console.print(Panel(text, title="[yellow]Änderungen seit letztem Scan[/]", border_style="yellow"))
+    else:
+        print("\n" + text)
+    thr = RISK_ORDER.get(alert_min, 2)
+    worth = [x for x in (added + changed) if RISK_ORDER.get(x["risk"], 9) <= thr]
+    if worth and (discord or webhook):
+        if discord:
+            _post_discord(discord, text)
+        if webhook:
+            _post_webhook(webhook, {"domain": domain, "added": added, "removed": removed, "changed": changed})
+
+
 def main():
     p = argparse.ArgumentParser(description="Periscan — Homelab Exposure Checker (nur eigene Domains!)")
     p.add_argument("domain", help="Deine Domain, z.B. chillyka.uk")
@@ -475,6 +577,14 @@ def main():
     p.add_argument("--timeout", type=int, default=6, help="Timeout pro Host in Sekunden (Default 6)")
     p.add_argument("--workers", type=int, default=20, help="Parallele Checks (Default 20)")
     p.add_argument("--no-ports", action="store_true", help="Direkte Port-Checks überspringen")
+    p.add_argument("--diff", action="store_true", help="Mit letztem Scan vergleichen (Änderungen anzeigen)")
+    p.add_argument("--watch", type=int, metavar="SEK", help="Dauer-Modus: alle SEK Sekunden scannen + Änderungen melden")
+    p.add_argument("--discord", metavar="URL", help="Discord-Webhook-URL für Alerts bei Änderungen")
+    p.add_argument("--webhook", metavar="URL", help="Generische Webhook-URL (JSON) für Alerts")
+    p.add_argument("--alert-min", default="MEDIUM", choices=["INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"],
+                   help="Mindest-Risiko für Alerts (Default MEDIUM)")
+    p.add_argument("--state-dir", default=os.path.join(os.path.expanduser("~"), ".periscan"),
+                   help="Speicherort der Scan-Snapshots (Default ~/.periscan)")
     p.add_argument("--json", metavar="DATEI", help="Ergebnis zusätzlich als JSON speichern")
     p.add_argument("--html", metavar="DATEI", help="Report als HTML speichern")
     p.add_argument("--svg", metavar="DATEI", help="Report als SVG speichern (Terminal-Look als Bild)")
@@ -490,11 +600,26 @@ def main():
         _console = Console(record=True)
 
     if _RICH:
-        _console.print(Panel.fit("[bold]Periscan[/] v0.7 — prüft, was von deiner Domain öffentlich erreichbar ist.\n"
+        _console.print(Panel.fit("[bold]Periscan[/] v0.8 — prüft, was von deiner Domain öffentlich erreichbar ist.\n"
                                  "[yellow]Nur auf eigenen Domains anwenden.[/]", border_style="blue"))
-    data = scan(args.domain, use_crt=not args.no_crt, timeout=args.timeout,
-                workers=args.workers, use_doh=not args.local_dns, do_ports=not args.no_ports)
-    render(args.domain, data["results"], data["ports"])
+    monitoring = args.diff or args.watch or args.discord or args.webhook
+
+    def one_run():
+        d = scan(args.domain, use_crt=not args.no_crt, timeout=args.timeout,
+                 workers=args.workers, use_doh=not args.local_dns, do_ports=not args.no_ports)
+        render(args.domain, d["results"], d["ports"])
+        if monitoring:
+            report_changes(args.domain, d, state_dir=args.state_dir,
+                           discord=args.discord, webhook=args.webhook, alert_min=args.alert_min)
+        return d
+
+    if args.watch:
+        _info(f"Watch-Modus: alle {args.watch}s scannen (Strg+C zum Beenden).")
+        while True:
+            one_run()
+            time.sleep(args.watch)
+
+    data = one_run()
     if args.json:
         with open(args.json, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)

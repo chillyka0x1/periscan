@@ -35,6 +35,15 @@ periscan-web                       # Web-Oberfläche, öffnet den Browser (http:
 
 CLI-Optionen: `--no-crt`, `--local-dns`, `--timeout`, `--workers`, `--json/--html/--svg DATEI`.
 
+### Monitoring (Änderungen erkennen + alarmieren)
+
+```bash
+periscan deine-domain.tld --diff                           # Änderungen seit letztem Scan
+periscan deine-domain.tld --watch 3600 --discord <URL>     # alle 60 Min scannen, bei neuer Exposition Discord-Alert
+```
+
+Periscan merkt sich jeden Scan (Snapshot in `~/.periscan`) und meldet **neue / geänderte / verschwundene** Expositionen — ideal als Cronjob oder Dauerdienst. Alerts via `--discord <Webhook-URL>` oder `--webhook <URL>` (JSON-POST); Schwelle über `--alert-min`.
+
 ### Per Docker (läuft als lokaler Dienst)
 
 ```bash
@@ -62,9 +71,11 @@ Deine Ergebnisse werden **nirgendwohin** gesendet. Der User-Agent identifiziert 
 - [x] CLI + DoH-Außen-Blick
 - [x] ~60-App-Fingerprint-DB + aktive Unauth-Checks
 - [x] Web-Dashboard (Dark/Light) + pip-/Docker-Installation
-- [ ] Direkte Port-Checks (Dienste hinter direktem Port-Forward, ohne Reverse-Proxy)
+- [x] Direkte Port-Checks (auch ohne Reverse-Proxy)
+- [x] **Monitoring:** wiederkehrende Scans + Diff über Zeit + Discord/Webhook-Alerts
+- [ ] IPv6/AAAA · mehrere Domains · CVE-Abgleich aus erkannten Versionen
 - [ ] Logo/Favicon, Light-Theme-Feinschliff
-- [ ] **Dauer-Monitoring + Alerts** („Dienst X ist seit gestern öffentlich!") — als gehosteter Dienst
+- [ ] Gehostete Version (Scan von außerhalb + Dauer-Monitoring) — der spätere bezahlte Teil
 
 ## Status
 
