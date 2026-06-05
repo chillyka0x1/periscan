@@ -1,5 +1,9 @@
 # Periscan
 
+[![CI](https://github.com/chillyka0x1/periscan/actions/workflows/ci.yml/badge.svg)](https://github.com/chillyka0x1/periscan/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](pyproject.toml)
+
 **Der Homelab-Exposure-Checker, der deine Apps versteht.**
 
 Pentester-Tools wie Nmap oder Nuclei sagen dir *Ports und CVEs* — aber nicht, ob du
