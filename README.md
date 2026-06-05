@@ -35,7 +35,9 @@ periscan deine-domain.tld          # CLI-Scan im Terminal
 periscan-web                       # Web-Oberfläche, öffnet den Browser (http://127.0.0.1:8000)
 ```
 
-CLI-Optionen: `--no-crt`, `--local-dns`, `--timeout`, `--workers`, `--json/--html/--svg DATEI`.
+Mehrere Domains: `periscan a.tld b.tld` oder `periscan --config domains.txt` (eine Domain pro Zeile).
+
+CLI-Optionen: `--no-crt`, `--local-dns`, `--no-ports`, `--timeout`, `--workers`, `--config DATEI`, `--json/--html/--svg DATEI`. Erkannte App-Versionen werden mit Hinweis „CVEs prüfen" angezeigt.
 
 ### Monitoring (Änderungen erkennen + alarmieren)
 

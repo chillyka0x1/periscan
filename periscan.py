@@ -226,9 +226,29 @@ def identify(res: dict):
     return "Unbekannter Dienst", "LOW", None
 
 
+_VER_RE = re.compile(r'"?(?:version(?:string)?)"?\s*[:=]\s*"?v?(\d+\.\d+[\w.\-]{0,18})', re.I)
+
+
+def _extract_version(r) -> str | None:
+    """Zieht eine Versionsangabe aus einer Unauth-Antwort (JSON-Feld oder Regex). Nur Info, KEIN Vuln-Urteil."""
+    try:
+        j = r.json()
+        if isinstance(j, dict):
+            for k in ("version", "versionstring", "Version", "VersionString"):
+                if j.get(k):
+                    return str(j[k])[:24]
+            d = j.get("data")
+            if isinstance(d, dict) and d.get("version"):
+                return str(d["version"])[:24]
+    except Exception:
+        pass
+    m = _VER_RE.search(r.text or "")
+    return m.group(1)[:24] if m else None
+
+
 def run_checks(host: str, fp: dict, timeout: int) -> list[dict]:
     """v0.4: aktive Unauth-Pfad-Checks. Bestätigt App-Identität + deckt offene Endpunkte/Setups auf.
-    Jeder Check: {path, status=200, body_contains=[...], proves, risk}."""
+    Jeder Check: {path, status=200, body_contains=[...], proves, risk}. v1.0: + Versions-Erkennung."""
     findings = []
     for chk in fp.get("exposure_checks", []):
         path = chk.get("path", "/")
@@ -244,7 +264,7 @@ def run_checks(host: str, fp: dict, timeout: int) -> list[dict]:
         if markers and not any(m.lower() in text for m in markers):
             continue
         findings.append({"path": path, "proves": chk.get("proves", ""),
-                         "risk": chk.get("risk", "MEDIUM")})
+                         "risk": chk.get("risk", "MEDIUM"), "version": _extract_version(r)})
     return findings
 
 
@@ -458,8 +478,11 @@ def render(domain: str, results: list[dict], ports: list[dict] = None):
             _console.print(Panel("Keine kritischen Expositionen gefunden.", border_style="green"))
         findings = [(r["host"], f) for r in reachable for f in r.get("findings", [])]
         if findings:
-            lines = [f"[bold]{h}{f['path']}[/] — {f['proves']} "
-                     f"[{RISK_COLOR.get(f['risk'], '')}]{f['risk']}[/]" for h, f in findings]
+            lines = []
+            for h, f in findings:
+                ver = f" · Version {f['version']} (CVEs prüfen)" if f.get("version") else ""
+                lines.append(f"[bold]{h}{f['path']}[/] — {f['proves']}{ver} "
+                             f"[{RISK_COLOR.get(f['risk'], '')}]{f['risk']}[/]")
             _console.print(Panel("\n".join(lines), title="[red]Unauth erreichbare Endpunkte[/]",
                                  border_style="red"))
         if ports:
@@ -590,13 +613,14 @@ def report_changes(domain, data, state_dir, discord=None, webhook=None, alert_mi
 
 def main():
     p = argparse.ArgumentParser(description="Periscan — Homelab Exposure Checker (nur eigene Domains!)")
-    p.add_argument("domain", nargs="+", help="Eine oder mehrere Domains, z.B. chillyka.uk meine-domain.de")
+    p.add_argument("domain", nargs="*", help="Eine oder mehrere Domains, z.B. chillyka.uk meine-domain.de")
     p.add_argument("--no-crt", action="store_true", help="Certificate-Transparency-Lookup überspringen")
     p.add_argument("--local-dns", action="store_true",
                    help="Lokalen DNS statt DoH nutzen (interner Blick, z.B. im eigenen LAN)")
     p.add_argument("--timeout", type=int, default=6, help="Timeout pro Host in Sekunden (Default 6)")
     p.add_argument("--workers", type=int, default=20, help="Parallele Checks (Default 20)")
     p.add_argument("--no-ports", action="store_true", help="Direkte Port-Checks überspringen")
+    p.add_argument("--config", metavar="DATEI", help="Datei mit einer Domain pro Zeile (# = Kommentar)")
     p.add_argument("--diff", action="store_true", help="Mit letztem Scan vergleichen (Änderungen anzeigen)")
     p.add_argument("--watch", type=int, metavar="SEK", help="Dauer-Modus: alle SEK Sekunden scannen + Änderungen melden")
     p.add_argument("--discord", metavar="URL", help="Discord-Webhook-URL für Alerts bei Änderungen")
@@ -620,13 +644,24 @@ def main():
         _console = Console(record=True)
 
     if _RICH:
-        _console.print(Panel.fit("[bold]Periscan[/] v0.9 — prüft, was von deiner Domain öffentlich erreichbar ist.\n"
+        _console.print(Panel.fit("[bold]Periscan[/] v1.0 — prüft, was von deiner Domain öffentlich erreichbar ist.\n"
                                  "[yellow]Nur auf eigenen Domains anwenden.[/]", border_style="blue"))
+    domains = list(args.domain)
+    if args.config:
+        try:
+            with open(args.config, encoding="utf-8") as f:
+                domains += [ln.strip() for ln in f if ln.strip() and not ln.lstrip().startswith("#")]
+        except Exception as e:
+            p.error(f"--config nicht lesbar: {e}")
+    domains = list(dict.fromkeys(domains))  # dedupe, Reihenfolge erhalten
+    if not domains:
+        p.error("Keine Domain angegeben (als Argument oder via --config).")
+
     monitoring = args.diff or args.watch or args.discord or args.webhook
 
     def one_pass():
         collected = []
-        for dom in args.domain:
+        for dom in domains:
             d = scan(dom, use_crt=not args.no_crt, timeout=args.timeout,
                      workers=args.workers, use_doh=not args.local_dns, do_ports=not args.no_ports)
             render(dom, d["results"], d["ports"])
@@ -637,7 +672,7 @@ def main():
         return collected
 
     if args.watch:
-        _info(f"Watch-Modus: {len(args.domain)} Domain(s), alle {args.watch}s scannen (Strg+C zum Beenden).")
+        _info(f"Watch-Modus: {len(domains)} Domain(s), alle {args.watch}s scannen (Strg+C zum Beenden).")
         while True:
             one_pass()
             time.sleep(args.watch)

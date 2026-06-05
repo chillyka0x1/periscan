@@ -171,7 +171,7 @@ function render(data){
     html+=`<div class="sec-title">Unauth erreichbare Endpunkte</div>`;
     findings.sort((a,b)=>(ORDER[a.risk]??9)-(ORDER[b.risk]??9));
     html+=findings.map(f=>`<div class="finding" style="border-left-color:var(--${f.risk.toLowerCase()})">
-      <div class="h">${esc(f.host)}${esc(f.path)} <span class="badge b-${f.risk}">${LABEL[f.risk]||f.risk}</span></div>
+      <div class="h">${esc(f.host)}${esc(f.path)} <span class="badge b-${f.risk}">${LABEL[f.risk]||f.risk}</span>${f.version?` <span class="muted">· Version ${esc(f.version)} (CVEs prüfen)</span>`:""}</div>
       <div class="p">${esc(f.proves)}</div></div>`).join("");
   }
 
