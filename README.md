@@ -54,6 +54,14 @@ Periscan merkt sich jeden Scan (Snapshot in `~/.periscan`) und meldet **neue / g
 
 ### Per Docker (läuft als lokaler Dienst)
 
+Fertiges Image (nach dem ersten Release-Build verfügbar):
+
+```bash
+docker run --rm -p 8000:8000 ghcr.io/chillyka0x1/periscan   # dann http://localhost:8000
+```
+
+Oder selbst bauen:
+
 ```bash
 docker build -t periscan .
 docker run --rm -p 8000:8000 periscan      # dann http://localhost:8000 öffnen

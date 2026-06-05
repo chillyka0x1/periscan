@@ -617,7 +617,7 @@ def report_changes(domain, data, state_dir, discord=None, webhook=None, alert_mi
 
 def main():
     p = argparse.ArgumentParser(description="Periscan — Homelab Exposure Checker (nur eigene Domains!)")
-    p.add_argument("-V", "--version", action="version", version="Periscan 1.0.1")
+    p.add_argument("-V", "--version", action="version", version="Periscan 1.0.2")
     p.add_argument("domain", nargs="*", help="Eine oder mehrere Domains, z.B. chillyka.uk meine-domain.de")
     p.add_argument("--no-crt", action="store_true", help="Certificate-Transparency-Lookup überspringen")
     p.add_argument("--local-dns", action="store_true",
@@ -649,7 +649,7 @@ def main():
         _console = Console(record=True)
 
     if _RICH:
-        _console.print(Panel.fit("[bold]Periscan[/] v1.0.1 — prüft, was von deiner Domain öffentlich erreichbar ist.\n"
+        _console.print(Panel.fit("[bold]Periscan[/] v1.0.2 — prüft, was von deiner Domain öffentlich erreichbar ist.\n"
                                  "[yellow]Nur auf eigenen Domains anwenden.[/]", border_style="blue"))
     domains = list(args.domain)
     if args.config:
