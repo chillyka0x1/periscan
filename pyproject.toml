@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "periscan"
+version = "0.7.0"
+description = "Prüft von außen, welche deiner self-hosted Dienste öffentlich erreichbar sind – und ob sie wirklich offen oder geschützt sind."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Adrian Bork" }]
+keywords = ["selfhosted", "homelab", "security", "attack-surface", "exposure", "scanner"]
+classifiers = [
+  "Environment :: Console",
+  "Intended Audience :: System Administrators",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Topic :: Security",
+]
+dependencies = ["requests>=2.31", "rich>=13.0", "flask>=3.0"]
+
+[project.scripts]
+periscan = "periscan:main"
+periscan-web = "webapp:main_web"
+
+[tool.setuptools]
+py-modules = ["periscan", "fingerprints", "webapp"]

@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+
+# Scan-Output (enthält ggf. eigene Domain-Daten — NICHT committen)
+*.json
+report*.txt
+report.svg
+report.html
+report*.svg
+report*.html
+build/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
