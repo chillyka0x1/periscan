@@ -59,6 +59,12 @@ docker build -t periscan .
 docker run --rm -p 8000:8000 periscan      # dann http://localhost:8000 öffnen
 ```
 
+Oder mit Docker Compose:
+
+```bash
+docker compose up --build                  # dann http://localhost:8000 öffnen
+```
+
 > ⚠️ **Nur auf eigenen Domains anwenden.** Es läuft komplett **lokal auf deinem Rechner** — nichts wird an einen Server gesendet.
 
 ## Datenschutz & Vertrauen

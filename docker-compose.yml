@@ -1,0 +1,11 @@
+services:
+  periscan:
+    build: .
+    container_name: periscan
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - ES_NO_BROWSER=1
+    restart: unless-stopped
+# Danach: http://localhost:8000 öffnen. Nur eigene Domains scannen.
