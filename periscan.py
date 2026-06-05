@@ -261,10 +261,13 @@ def run_checks(host: str, fp: dict, timeout: int) -> list[dict]:
             continue
         markers = chk.get("body_contains", [])
         text = (r.text or "").lower()
-        if markers and not any(m.lower() in text for m in markers):
+        matched = [m for m in markers if m.lower() in text]
+        if markers and not matched:
             continue
+        evidence = f"{path} → HTTP {r.status_code}" + (f", enthält {matched[0]!r}" if matched else "")
         findings.append({"path": path, "proves": chk.get("proves", ""),
-                         "risk": chk.get("risk", "MEDIUM"), "version": _extract_version(r)})
+                         "risk": chk.get("risk", "MEDIUM"), "version": _extract_version(r),
+                         "evidence": evidence})
     return findings
 
 
@@ -481,8 +484,9 @@ def render(domain: str, results: list[dict], ports: list[dict] = None):
             lines = []
             for h, f in findings:
                 ver = f" · Version {f['version']} (CVEs prüfen)" if f.get("version") else ""
+                ev = f"\n   [dim]Beleg: {f['evidence']}[/]" if f.get("evidence") else ""
                 lines.append(f"[bold]{h}{f['path']}[/] — {f['proves']}{ver} "
-                             f"[{RISK_COLOR.get(f['risk'], '')}]{f['risk']}[/]")
+                             f"[{RISK_COLOR.get(f['risk'], '')}]{f['risk']}[/]{ev}")
             _console.print(Panel("\n".join(lines), title="[red]Unauth erreichbare Endpunkte[/]",
                                  border_style="red"))
         if ports:
@@ -613,6 +617,7 @@ def report_changes(domain, data, state_dir, discord=None, webhook=None, alert_mi
 
 def main():
     p = argparse.ArgumentParser(description="Periscan — Homelab Exposure Checker (nur eigene Domains!)")
+    p.add_argument("-V", "--version", action="version", version="Periscan 1.0.1")
     p.add_argument("domain", nargs="*", help="Eine oder mehrere Domains, z.B. chillyka.uk meine-domain.de")
     p.add_argument("--no-crt", action="store_true", help="Certificate-Transparency-Lookup überspringen")
     p.add_argument("--local-dns", action="store_true",
@@ -644,7 +649,7 @@ def main():
         _console = Console(record=True)
 
     if _RICH:
-        _console.print(Panel.fit("[bold]Periscan[/] v1.0 — prüft, was von deiner Domain öffentlich erreichbar ist.\n"
+        _console.print(Panel.fit("[bold]Periscan[/] v1.0.1 — prüft, was von deiner Domain öffentlich erreichbar ist.\n"
                                  "[yellow]Nur auf eigenen Domains anwenden.[/]", border_style="blue"))
     domains = list(args.domain)
     if args.config:

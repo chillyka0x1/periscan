@@ -158,7 +158,7 @@ async function doScan(e){
 function render(data){
   const rows=data.results.filter(r=>r.scheme).sort((a,b)=>(ORDER[a.risk]??9)-(ORDER[b.risk]??9)||a.host.localeCompare(b.host));
   const count=k=>rows.filter(r=>r.risk===k).length;
-  const findings=[];rows.forEach(r=>(r.findings||[]).forEach(f=>findings.push({host:r.host,...f})));
+  const findings=[];rows.forEach(r=>(r.findings||[]).forEach(f=>findings.push({host:r.host,app:r.app,...f})));
   const cards=[
     ["Kritisch",count("CRITICAL"),"crit"],["Hoch",count("HIGH"),"high"],
     ["Mittel",count("MEDIUM"),"med"],["Geschützt",count("OK"),"ok"],
@@ -171,8 +171,8 @@ function render(data){
     html+=`<div class="sec-title">Unauth erreichbare Endpunkte</div>`;
     findings.sort((a,b)=>(ORDER[a.risk]??9)-(ORDER[b.risk]??9));
     html+=findings.map(f=>`<div class="finding" style="border-left-color:var(--${f.risk.toLowerCase()})">
-      <div class="h">${esc(f.host)}${esc(f.path)} <span class="badge b-${f.risk}">${LABEL[f.risk]||f.risk}</span>${f.version?` <span class="muted">· Version ${esc(f.version)} (CVEs prüfen)</span>`:""}</div>
-      <div class="p">${esc(f.proves)}</div></div>`).join("");
+      <div class="h">${esc(f.host)}${esc(f.path)} <span class="badge b-${f.risk}">${LABEL[f.risk]||f.risk}</span>${f.version?` <a href="https://nvd.nist.gov/vuln/search/results?query=${encodeURIComponent(((f.app||"")+" "+f.version).trim())}" target="_blank" rel="noopener" style="color:var(--accent)">· Version ${esc(f.version)} (CVEs prüfen)</a>`:""}</div>
+      <div class="p">${esc(f.proves)}${f.evidence?`<br><span class="muted">Beleg: ${esc(f.evidence)}</span>`:""}</div></div>`).join("");
   }
 
   const main=rows.filter(r=>!isNoise(r)), noise=rows.filter(isNoise);
