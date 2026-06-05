@@ -99,19 +99,20 @@ DOH_ENDPOINTS = [
 
 
 def resolve_public(host: str, timeout: int) -> str | None:
-    """A-Record über öffentlichen DoH-Resolver (Cloudflare, Fallback Google)."""
+    """Öffentliche IP über DoH (Cloudflare, Fallback Google). Bevorzugt A (IPv4),
+    fällt auf AAAA (IPv6) zurück → deckt auch IPv6-only-Homelabs (CGNAT) ab."""
     for url, extra in DOH_ENDPOINTS:
-        try:
-            r = requests.get(url, params={"name": host, "type": "A"},
-                             headers={"User-Agent": UA, **extra}, timeout=timeout)
-            if r.status_code != 200:
+        for rtype, code in (("A", 1), ("AAAA", 28)):
+            try:
+                r = requests.get(url, params={"name": host, "type": rtype},
+                                 headers={"User-Agent": UA, **extra}, timeout=timeout)
+                if r.status_code != 200:
+                    continue
+                for ans in r.json().get("Answer", []):
+                    if ans.get("type") == code:
+                        return ans.get("data")
+            except Exception:
                 continue
-            for ans in r.json().get("Answer", []):
-                if ans.get("type") == 1:  # A-Record
-                    return ans.get("data")
-            return None  # geantwortet, aber kein A-Record -> existiert öffentlich nicht
-        except Exception:
-            continue
     return None
 
 
@@ -133,6 +134,21 @@ def adjust_risk(res: dict, risk: str) -> str:
     if res.get("scheme") == "https" and not tls.get("valid") and risk in ("INFO", "LOW", "OK"):
         return "MEDIUM"
     return risk
+
+
+def detect_access(res: dict) -> str:
+    """Konservative Zugangs-Einstufung: nur behaupten, was belegbar ist.
+    'geschützt' (401/403) oder 'Login' (Passwortfeld im HTML). Sonst leer —
+    SPAs rendern Login per JS, fehlendes Passwortfeld beweist KEINE fehlende Auth.
+    Der echte 'wirklich offen'-Beweis kommt aus den aktiven exposure_checks (findings)."""
+    st = res.get("status")
+    if st in (401, 403):
+        return "geschützt"
+    if st and 200 <= st < 400:
+        body = res.get("body") or ""
+        if 'type="password"' in body or 'name="password"' in body or 'id="password"' in body:
+            return "Login"
+    return ""
 
 
 def tls_info(host: str, timeout: int) -> dict:
@@ -353,6 +369,7 @@ def scan(domain: str, use_crt: bool, timeout: int, workers: int,
                 if res:
                     app, risk, fp = identify(res)
                     res["app"], res["risk"], res["_fp"] = app, adjust_risk(res, risk), fp
+                    res["access"] = detect_access(res)
                     results.append(res)
         # v0.4: aktive Pfad-Checks für identifizierte Apps mit definierten exposure_checks
         checkable = [r for r in results if r.get("_fp") and r["_fp"].get("exposure_checks")]
@@ -427,7 +444,9 @@ def render(domain: str, results: list[dict], ports: list[dict] = None):
             tls_txt = "[green]ok[/]" if tls.get("valid") and not tls.get("expired") else \
                 ("[red]abgelaufen[/]" if tls.get("expired") else f"[red]{tls.get('error','-')[:24]}[/]")
             style = RISK_COLOR.get(r["risk"], "")
-            app_txt = r["app"] + (" (geschützt)" if r["risk"] == "OK" else "")
+            acc = {"geschützt": " (geschützt)", "Login": " (Login-Seite)",
+                   "offen": " (offen, keine Auth)"}.get(r.get("access", ""), "")
+            app_txt = r["app"] + acc
             table.add_row(r["host"], app_txt, str(r["status"] or "-"), tls_txt,
                           f"[{style}]{r['risk']}[/]")
         _console.print(table)
@@ -456,7 +475,8 @@ def render(domain: str, results: list[dict], ports: list[dict] = None):
     else:
         print(f"\n=== Öffentlich erreichbar — {domain} ===")
         for r in reachable:
-            suffix = " (geschützt)" if r["risk"] == "OK" else ""
+            suffix = {"geschützt": " (geschützt)", "Login": " (Login)",
+                      "offen": " (offen)"}.get(r.get("access", ""), "")
             print(f"[{r['risk']:8}] {r['host']:35} {r['app']}{suffix}  (HTTP {r['status']})")
         for r in reachable:
             for f in r.get("findings", []):
@@ -570,7 +590,7 @@ def report_changes(domain, data, state_dir, discord=None, webhook=None, alert_mi
 
 def main():
     p = argparse.ArgumentParser(description="Periscan — Homelab Exposure Checker (nur eigene Domains!)")
-    p.add_argument("domain", help="Deine Domain, z.B. chillyka.uk")
+    p.add_argument("domain", nargs="+", help="Eine oder mehrere Domains, z.B. chillyka.uk meine-domain.de")
     p.add_argument("--no-crt", action="store_true", help="Certificate-Transparency-Lookup überspringen")
     p.add_argument("--local-dns", action="store_true",
                    help="Lokalen DNS statt DoH nutzen (interner Blick, z.B. im eigenen LAN)")
@@ -600,29 +620,33 @@ def main():
         _console = Console(record=True)
 
     if _RICH:
-        _console.print(Panel.fit("[bold]Periscan[/] v0.8 — prüft, was von deiner Domain öffentlich erreichbar ist.\n"
+        _console.print(Panel.fit("[bold]Periscan[/] v0.9 — prüft, was von deiner Domain öffentlich erreichbar ist.\n"
                                  "[yellow]Nur auf eigenen Domains anwenden.[/]", border_style="blue"))
     monitoring = args.diff or args.watch or args.discord or args.webhook
 
-    def one_run():
-        d = scan(args.domain, use_crt=not args.no_crt, timeout=args.timeout,
-                 workers=args.workers, use_doh=not args.local_dns, do_ports=not args.no_ports)
-        render(args.domain, d["results"], d["ports"])
-        if monitoring:
-            report_changes(args.domain, d, state_dir=args.state_dir,
-                           discord=args.discord, webhook=args.webhook, alert_min=args.alert_min)
-        return d
+    def one_pass():
+        collected = []
+        for dom in args.domain:
+            d = scan(dom, use_crt=not args.no_crt, timeout=args.timeout,
+                     workers=args.workers, use_doh=not args.local_dns, do_ports=not args.no_ports)
+            render(dom, d["results"], d["ports"])
+            if monitoring:
+                report_changes(dom, d, state_dir=args.state_dir,
+                               discord=args.discord, webhook=args.webhook, alert_min=args.alert_min)
+            collected.append({"domain": dom, **d})
+        return collected
 
     if args.watch:
-        _info(f"Watch-Modus: alle {args.watch}s scannen (Strg+C zum Beenden).")
+        _info(f"Watch-Modus: {len(args.domain)} Domain(s), alle {args.watch}s scannen (Strg+C zum Beenden).")
         while True:
-            one_run()
+            one_pass()
             time.sleep(args.watch)
 
-    data = one_run()
+    data = one_pass()
+    out = data if len(data) > 1 else data[0]
     if args.json:
         with open(args.json, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
+            json.dump(out, f, indent=2, ensure_ascii=False)
         _info(f"JSON gespeichert: {args.json}")
     if _RICH and args.svg:
         _console.save_svg(args.svg, title="Periscan", clear=False)

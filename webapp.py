@@ -184,7 +184,9 @@ function rowHtml(r){
   const tls=r.tls||{};
   const tlsHtml = tls.valid&&!tls.expired ? '<span class="tls-ok">ok</span>'
     : (tls.expired?'<span class="tls-bad">abgelaufen</span>':'<span class="tls-bad">'+esc((tls.error||"-").slice(0,28))+'</span>');
-  const app = esc(r.app) + (r.risk==="OK"?' <span class="muted">(geschützt)</span>':'');
+  const accMap={"geschützt":" (geschützt)","Login":" (Login-Seite)","offen":" (offen, keine Auth)"};
+  const acc=accMap[r.access]||"";
+  const app = esc(r.app) + (acc?' <span class="muted">'+acc+'</span>':'');
   return `<tr><td class="host">${esc(r.host)}</td><td>${app}</td><td>${r.status??"-"}</td>
     <td>${tlsHtml}</td><td><span class="badge b-${r.risk}">${LABEL[r.risk]||r.risk}</span></td></tr>`;
 }
