@@ -73,7 +73,9 @@ Deine Ergebnisse werden **nirgendwohin** gesendet. Der User-Agent identifiziert 
 - [x] Web-Dashboard (Dark/Light) + pip-/Docker-Installation
 - [x] Direkte Port-Checks (auch ohne Reverse-Proxy)
 - [x] **Monitoring:** wiederkehrende Scans + Diff über Zeit + Discord/Webhook-Alerts
-- [ ] IPv6/AAAA · mehrere Domains · CVE-Abgleich aus erkannten Versionen
+- [x] IPv6/AAAA-Fallback · Multi-Domain-Scan · Auth-Labeling (geschützt/Login)
+- [x] Tests + CI (GitHub Actions)
+- [ ] CVE-Abgleich aus erkannten Versionen · Config-Datei für viele Domains
 - [ ] Logo/Favicon, Light-Theme-Feinschliff
 - [ ] Gehostete Version (Scan von außerhalb + Dauer-Monitoring) — der spätere bezahlte Teil
 
