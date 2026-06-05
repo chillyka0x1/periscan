@@ -7,6 +7,8 @@ aus Versehen dein **Proxmox**, deinen **code-server** oder dein **Nginx-Proxy-Ma
 ins offene Internet gestellt hast. Periscan prüft deine Domain von außen, erkennt die
 typischen Self-Hosting-Apps und sagt dir in Klartext, **was gefährlich ist und was zu tun ist**.
 
+![Periscan – Beispiel-Report (anonymisierte Demo-Daten)](docs/demo.svg)
+
 > ⚠️ **Nur auf eigenen Domains anwenden.** Das Scannen fremder Hosts kann rechtswidrig sein.
 
 ## Was es tut

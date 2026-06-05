@@ -60,6 +60,9 @@ PAGE = r"""<!doctype html>
   .opts{display:flex;gap:18px;color:var(--muted);font-size:13px;margin:2px 2px 0}
   .opts label{display:flex;gap:7px;align-items:center;cursor:pointer}
   .hint{color:var(--muted);font-size:12.5px;margin:8px 2px 0}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;margin:14px 2px 0;color:var(--muted);font-size:12.5px}
+  .legend span{display:flex;align-items:center;gap:6px}
+  .dot{width:10px;height:10px;border-radius:50%;display:inline-block}
   .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:24px 0}
   .stat{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px 18px}
   .stat .n{font-size:30px;font-weight:700;line-height:1}
@@ -104,6 +107,15 @@ PAGE = r"""<!doctype html>
       <label><input type="checkbox" id="local"> lokaler DNS (interner Blick)</label>
     </div>
     <div class="hint">Nur eigene Domains scannen. Standard: öffentlicher DNS (DoH) = echter Außen-Blick.</div>
+  </div>
+
+  <div class="legend">
+    <span><i class="dot" style="background:var(--crit)"></i>Kritisch</span>
+    <span><i class="dot" style="background:var(--high)"></i>Hoch</span>
+    <span><i class="dot" style="background:var(--med)"></i>Mittel</span>
+    <span><i class="dot" style="background:var(--low)"></i>Niedrig</span>
+    <span><i class="dot" style="background:var(--info)"></i>Info</span>
+    <span><i class="dot" style="background:var(--ok)"></i>Geschützt</span>
   </div>
 
   <div id="out"></div>
